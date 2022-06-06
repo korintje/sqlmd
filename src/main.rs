@@ -86,14 +86,13 @@ pub async fn load_xyz(path: &path::Path, tx: mpsc::Sender<Atom>) -> Result<(), S
 async fn write_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) {
     
     let _r1 = Sqlite::create_database(dbpath).await;
-    let mut conn = SqliteConnection::connect("sqlite::memory:").await.unwrap();
+    let mut conn = SqliteConnection::connect(dbpath).await.unwrap();
     let table_count: TableCount = sqlx::query_as(
             "SELECT COUNT(*) as count FROM sqlite_master WHERE TYPE='table' AND name=$1"
         ).bind("traj").fetch_one(&mut conn).await.unwrap();
-        let is_table_exist = if table_count.count == 0 {false} else {true};
+    let is_table_exist = if table_count.count == 0 {false} else {true};
 
     if !is_table_exist {
-        println!("not exist");
         let _r2 = &conn.execute(sqlx::query(
             "CREATE TABLE IF NOT EXISTS traj (
                 step        INTEGER NOT NULL,
@@ -117,7 +116,7 @@ async fn write_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) {
 
         if counter < 5000 {
             let values = format!(
-                "({}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
+                "({}, {}, '{}', {}, {}, {}, {}, {}, {}, {}), ",
                 atom.step, atom.atom_id,
                 atom.element, atom.charge,
                 atom.x, atom.y, atom.z,
@@ -126,13 +125,23 @@ async fn write_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) {
             query_str += &values;
             counter += 1;
         } else {
-            let _r2 = &conn.execute(sqlx::query(&query_str)).await;
+            println!("----------------- {} -----------------", &counter);
+            let query = &query_str[0..query_str.len()-2];
+            match &conn.execute(sqlx::query(&query)).await {
+                Err(e) => panic!("{}", e),
+                Ok(_r) => (),
+            };
             query_str = "INSERT INTO traj VALUES ".to_string();
             counter = 0;
         }
 
     }
-    let _r2 = &conn.execute(sqlx::query(&query_str)).await;
+    println!("----------------- LAST {} -----------------", &counter);
+    let query = &query_str[0..query_str.len()-2];
+    match &conn.execute(sqlx::query(&query)).await {
+        Err(e) => panic!("{}", e),
+        Ok(_r) => (),
+    };
 
 }
 
