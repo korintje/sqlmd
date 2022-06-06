@@ -2,7 +2,6 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::fs;
 use tokio::sync::mpsc;
 use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::{FromRow, SqliteConnection, Connection, Sqlite, Executor};
 use std::path;
 mod model;
@@ -13,18 +12,6 @@ use serde::{Serialize};
 pub struct TableCount {
     pub count: i32,
 }
-
-/*
-pub async fn is_table_exist(mut conn: &sqlx::SqliteConnection, table_name: &str) -> bool {
-    let table_count: TableCount = sqlx::query_as(
-        "SELECT COUNT(*) as count FROM sqlite_master WHERE TYPE='table' AND name=$1"
-    )
-    .bind(table_name)
-    .fetch_one(&mut conn)
-    .await.unwrap();
-    if table_count.count == 0 {false} else {true}
-}
-*/
 
 pub async fn load_xyz(path: &path::Path, tx: mpsc::Sender<Atom>) -> Result<(), String> {
     
@@ -99,7 +86,6 @@ pub async fn load_xyz(path: &path::Path, tx: mpsc::Sender<Atom>) -> Result<(), S
 async fn write_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) {
     
     let _r1 = Sqlite::create_database(dbpath).await;
-    // let pool = SqlitePoolOptions::new().max_connections(32).connect(dbpath).await.unwrap();
     let mut conn = SqliteConnection::connect("sqlite::memory:").await.unwrap();
     let table_count: TableCount = sqlx::query_as(
             "SELECT COUNT(*) as count FROM sqlite_master WHERE TYPE='table' AND name=$1"
@@ -129,7 +115,7 @@ async fn write_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) {
 
     while let Some(atom) = rx.recv().await {         
 
-        if counter < 25000 {
+        if counter < 5000 {
             let values = format!(
                 "({}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
                 atom.step, atom.atom_id,
@@ -144,24 +130,9 @@ async fn write_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) {
             query_str = "INSERT INTO traj VALUES ".to_string();
             counter = 0;
         }
-        
+
     }
     let _r2 = &conn.execute(sqlx::query(&query_str)).await;
-
-    
-    /*
-    while let Some(atom) = rx.recv().await {
-        /*
-        let _r3 = sqlx::query("INSERT INTO traj VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)")
-            .bind(atom.step).bind(atom.atom_id)
-            .bind(atom.element).bind(atom.charge)
-            .bind(atom.x).bind(atom.y).bind(atom.z)
-            .bind(atom.vx).bind(atom.vy).bind(atom.vz)
-            .execute(&pool).await;
-        */
-        let _3 = sqlx::
-    }
-    */
 
 }
 
@@ -173,11 +144,11 @@ async fn main() {
     let xyzpath = "geo_end.xyz";
     let xyzpath = path::Path::new(xyzpath);
     
-    let (tx, rx) = mpsc::channel(1024000);
+    let (tx, rx) = mpsc::channel(102400);
     let handle1 = tokio::spawn(load_xyz(xyzpath, tx));
     let handle2 = tokio::spawn(write_db(rx, dbpath));
     if let (Ok(_res1), Ok(_res2)) = tokio::join!(handle1, handle2) {
-        println!("OK");
+        println!("Finished");
     }
 
 }
