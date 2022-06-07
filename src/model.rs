@@ -1,3 +1,6 @@
+use serde::{Serialize};
+use sqlx::{FromRow};
+
 #[derive(Debug)]
 pub struct Atom{
   pub step: i64,
@@ -10,4 +13,9 @@ pub struct Atom{
   pub vx: f64,
   pub vy: f64,
   pub vz: f64,
+}
+
+#[derive(FromRow, Serialize)]
+pub struct TableCount {
+    pub count: i32,
 }
