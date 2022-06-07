@@ -76,8 +76,9 @@ async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: &path::
 }
 
 
-async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) {
+async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) -> Result<(), String> {
 
+    // Prepare DB file and table
     let _r1 = Sqlite::create_database(dbpath).await;
     let mut conn = SqliteConnection::connect(dbpath).await.unwrap();
     let table_count: TableCount = sqlx::query_as(
@@ -101,6 +102,7 @@ async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) {
         )).await;
     }
 
+    // Insert atom parameters into the table
     let mut values = vec![];
     let query_head = "INSERT INTO traj VALUES ".to_string();
     let mut counter = 0;
@@ -130,8 +132,8 @@ async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) {
     let query = query_head + &values.join(", ");
     match &conn.execute(sqlx::query(&query)).await {
         Err(e) => panic!("{}", e),
-        Ok(_r) => (),
-    };
+        Ok(_r) => Ok(()),
+    }
 
 }
 

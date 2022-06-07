@@ -14,15 +14,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async_test"
-version = "0.1.0"
-dependencies = [
- "serde",
- "sqlx",
- "tokio",
-]
-
-[[package]]
 name = "atoi"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -735,6 +726,15 @@ dependencies = [
  "itertools",
  "nom",
  "unicode_categories",
+]
+
+[[package]]
+name = "sqlmd"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]
