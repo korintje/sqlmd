@@ -6,8 +6,9 @@ mod model;
 use model::{Atom, TableCount};
 
 
-async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: &path::Path) -> Result<(), String> {
+async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String) -> Result<(), String> {
     
+    let path = path::Path::new(&path);
     let file = match fs::File::open(path).await {
       Err(why) => panic!("couldn't open {}: {}", path.display(), why),
       Ok(file) => file,
@@ -76,11 +77,11 @@ async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: &path::
 }
 
 
-async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: &str) -> Result<(), String> {
+async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: String) -> Result<(), String> {
 
     // Prepare DB file and table
-    let _r1 = Sqlite::create_database(dbpath).await;
-    let mut conn = SqliteConnection::connect(dbpath).await.unwrap();
+    let _r1 = Sqlite::create_database(&dbpath).await;
+    let mut conn = SqliteConnection::connect(&dbpath).await.unwrap();
     let table_count: TableCount = sqlx::query_as(
             "SELECT COUNT(*) as count FROM sqlite_master WHERE TYPE='table' AND name=$1"
         ).bind("traj").fetch_one(&mut conn).await.unwrap();
@@ -149,13 +150,16 @@ async fn print_log(mut rx: mpsc::Receiver<i64>, mut stdout: io::Stdout) {
 }
 
 
-#[tokio::main]
-async fn main() {
-    
-    let dbpath = "geo_end.db";
-    let xyzpath = "geo_end.xyz";
-    let xyzpath = path::Path::new(xyzpath);
-    
+async fn read_xyz(filepath: &str) {
+
+    let xyzpath = filepath.to_string();
+    let dbpath = xyzpath.clone() + ".db";
+
+    if path::Path::new(&dbpath).exists() {
+        let checksum = crc32fast::hash(b"geo_end.db");
+        println!("{}", checksum);
+    };
+   
     let stdout = io::stdout();
     let (tx0, rx0) = mpsc::channel(102400);
     let (tx1, rx1) = mpsc::channel(1024);
@@ -167,5 +171,15 @@ async fn main() {
     if let (Ok(_res1), Ok(_res2)) = tokio::join!(load_handle, save_handle) {
         println!("-------- Finished --------");
     }
+
+}
+
+
+#[tokio::main]
+async fn main() {
+    
+    // let dbpath = "geo_end.db";
+    let xyzpath = "geo_end.xyz";
+    let _ = read_xyz(xyzpath);
 
 }
