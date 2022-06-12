@@ -1,6 +1,8 @@
 use sqlx::{migrate::MigrateDatabase, SqliteConnection, Connection, Sqlite, Executor};
 use crate::{model, error};
 use error::SQLMDError;
+use model::Atom;
+use tokio::sync::mpsc;
 
 // Create DB file
 pub async fn create_db(dbpath: &str) 
@@ -80,8 +82,37 @@ pub async fn save_hash(conn: &mut SqliteConnection, hash: &[u8]) -> Result<(), S
   Ok(())
 }
 
-/*
-pub async fn load_db() {
+
+pub async fn save_db(mut rx: mpsc::Receiver<Atom>, mut conn: sqlx::SqliteConnection) 
+-> Result<(), error::SQLMDError> {
+
+    // Insert atom parameters into the table
+    let mut values = vec![];
+    let query_head = "INSERT INTO traj VALUES ".to_string();
+    let mut counter = 0;
+
+    while let Some(atom) = rx.recv().await {         
+        if counter < 5000 {
+            let value = format!(
+                "({}, {}, '{}', {}, {}, {}, {}, {}, {}, {})",
+                atom.step, atom.atom_id,
+                atom.element, atom.charge,
+                atom.x, atom.y, atom.z,
+                atom.vx, atom.vy, atom.vz,
+            );
+            values.push(value);
+            counter += 1;
+        } else {
+            let query = query_head.clone() + &values.join(", ");
+            let _ = &conn.execute(sqlx::query(&query)).await?;
+            values = vec![];
+            counter = 0; 
+        }
+    }
+
+    let query = query_head + &values.join(", ");
+    let _ = &conn.execute(sqlx::query(&query)).await?;
+
+    Ok(())
 
 }
-*/

@@ -1,10 +1,8 @@
 use tokio::io::{self, BufReader, AsyncBufReadExt, AsyncWriteExt};
 use tokio::{fs, sync::mpsc};
-use sqlx::{migrate::MigrateDatabase, SqliteConnection, Connection, Sqlite, Executor};
 use std::path;
 use crate::{model, error};
-use model::{Atom, TableCount};
-// use pyo3::PyErr;
+use model::Atom;
 
 
 pub async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String) 
@@ -68,41 +66,6 @@ pub async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: Str
             tx0.send(atom).await.unwrap();
         }
     }
-
-    Ok(())
-
-}
-
-
-pub async fn save_db(mut rx: mpsc::Receiver<Atom>, mut conn: sqlx::SqliteConnection) 
--> Result<(), error::SQLMDError> {
-
-    // Insert atom parameters into the table
-    let mut values = vec![];
-    let query_head = "INSERT INTO traj VALUES ".to_string();
-    let mut counter = 0;
-
-    while let Some(atom) = rx.recv().await {         
-        if counter < 5000 {
-            let value = format!(
-                "({}, {}, '{}', {}, {}, {}, {}, {}, {}, {})",
-                atom.step, atom.atom_id,
-                atom.element, atom.charge,
-                atom.x, atom.y, atom.z,
-                atom.vx, atom.vy, atom.vz,
-            );
-            values.push(value);
-            counter += 1;
-        } else {
-            let query = query_head.clone() + &values.join(", ");
-            let _ = &conn.execute(sqlx::query(&query)).await?;
-            values = vec![];
-            counter = 0; 
-        }
-    }
-
-    let query = query_head + &values.join(", ");
-    let _ = &conn.execute(sqlx::query(&query)).await?;
 
     Ok(())
 

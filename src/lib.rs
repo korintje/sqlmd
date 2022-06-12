@@ -48,7 +48,7 @@ pub async fn read_xyz(filepath: &str)
     let (tx1, rx1) = mpsc::channel(1024);
     
     let load_handle = tokio::spawn(load::load_xyz(tx0, tx1, xyzpath));
-    let save_handle = tokio::spawn(load::save_db(rx0, conn));
+    let save_handle = tokio::spawn(db::save_db(rx0, conn));
     let log_handle = tokio::spawn(load::print_log(rx1, stdout));
 
     let results = tokio::join!(load_handle, save_handle, log_handle);
@@ -67,6 +67,7 @@ pub async fn read_xyz(filepath: &str)
 }
 
 
+// Wrapper of read_xyz function for Python.
 #[pyfunction]
 #[pyo3(name = "read_xyz")]
 fn py_read_xyz(filepath: &str) -> PyResult<String> {
@@ -81,7 +82,7 @@ fn py_read_xyz(filepath: &str) -> PyResult<String> {
 }
 
 
-/// A Python module implemented in Rust.
+// A Python module implemented in Rust.
 #[pymodule]
 fn sqlmd(_py: Python, m: &PyModule) -> PyResult<()> {
     let _r = m.add_function(wrap_pyfunction!(py_read_xyz, m)?)?;
