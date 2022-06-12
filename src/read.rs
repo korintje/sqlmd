@@ -2,11 +2,13 @@ use tokio::io::{self, BufReader, AsyncBufReadExt, AsyncWriteExt};
 use tokio::{fs, sync::mpsc};
 use sqlx::{migrate::MigrateDatabase, SqliteConnection, Connection, Sqlite, Executor};
 use std::path;
-mod model;
+use crate::{model, error};
 use model::{Atom, TableCount};
+use pyo3::PyErr;
 
 
-async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String) -> Result<(), String> {
+async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String) 
+-> Result<(), PyErr> {
     
     let path = path::Path::new(&path);
     let file = match fs::File::open(path).await {
@@ -26,16 +28,10 @@ async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String)
             None => break,
             Some(s) => s,
         };
-        let atom_count = match header.trim().parse::<i64>() {
-            Err(e) => panic!("couldn't convert header to integer.\n {}", e),
-            Ok(num) => num,
-        };
+        let atom_count = header.trim().parse::<i64>()?;
 
         // Load comment line to extract step number
-        let line = match lines.next_line().await {
-            Err(e) => panic!("Failed to read .xyz comment line.\n {}", e),
-            Ok(l) => l,
-        };
+        let line = lines.next_line().await?;
         let comment = match line {
             None => panic!("Could not to find step number in .xyz file."),
             Some(s) => s,
@@ -47,12 +43,9 @@ async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String)
 
         // Load atom parameters
         for i in 0..atom_count {
-            let line = match lines.next_line().await {
-                Err(e) => panic!("Failed to get atom parameters in .xyz.\n {}", e),
-                Ok(l) => l,
-            };
+            let line = lines.next_line().await?;
             let atom_str = match line {
-                None => panic!("Could not to find atom parameters in .xyz file."),
+                None => continue,
                 Some(s) => s,
             };
             let mut params = atom_str.split_whitespace();
@@ -77,14 +70,15 @@ async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String)
 }
 
 
-async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: String) -> Result<(), String> {
+async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: String) 
+-> Result<(), error::SQLMDError> {
 
     // Prepare DB file and table
     let _r1 = Sqlite::create_database(&dbpath).await;
-    let mut conn = SqliteConnection::connect(&dbpath).await.unwrap();
+    let mut conn = SqliteConnection::connect(&dbpath).await?;
     let table_count: TableCount = sqlx::query_as(
             "SELECT COUNT(*) as count FROM sqlite_master WHERE TYPE='table' AND name=$1"
-        ).bind("traj").fetch_one(&mut conn).await.unwrap();
+        ).bind("traj").fetch_one(&mut conn).await?;
 
     if table_count.count == 0 {
         let _r2 = &conn.execute(sqlx::query(
@@ -121,20 +115,16 @@ async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: String) -> Result<(), Str
             counter += 1;
         } else {
             let query = query_head.clone() + &values.join(", ");
-            match &conn.execute(sqlx::query(&query)).await {
-                Err(e) => panic!("{}", e),
-                Ok(_r) => (),
-            };
+            let _ = &conn.execute(sqlx::query(&query)).await?;
             values = vec![];
-            counter = 0;
+            counter = 0; 
         }
     }
 
     let query = query_head + &values.join(", ");
-    match &conn.execute(sqlx::query(&query)).await {
-        Err(e) => panic!("{}", e),
-        Ok(_r) => Ok(()),
-    }
+    let _ = &conn.execute(sqlx::query(&query)).await?;
+
+    Ok(())
 
 }
 
@@ -150,8 +140,10 @@ async fn print_log(mut rx: mpsc::Receiver<i64>, mut stdout: io::Stdout) {
 }
 
 
-async fn read_xyz(filepath: &str) {
 
+pub async fn read_xyz(filepath: &str) 
+-> Result<(), error::SQLMDError> {
+    
     let xyzpath = filepath.to_string();
     let dbpath = xyzpath.clone() + ".db";
 
@@ -167,19 +159,15 @@ async fn read_xyz(filepath: &str) {
     let load_handle = tokio::spawn(load_xyz(tx0, tx1, xyzpath));
     let save_handle = tokio::spawn(save_db(rx0, dbpath));
     let _log_handle = tokio::spawn(print_log(rx1, stdout));
-    
-    if let (Ok(_res1), Ok(_res2)) = tokio::join!(load_handle, save_handle) {
-        println!("-------- Finished --------");
+
+    match tokio::join!(load_handle, save_handle) {
+        (Ok(_r1), Ok(_r2)) => {
+            println!("-------- Finished --------");
+            return Ok(())
+        },
+        (Ok(_r1), Err(r2)) => return Err(error::SQLMDError::from(r2)),
+        (Err(r1), Ok(_r2)) => return Err(error::SQLMDError::from(r1)),
+        (Err(r1), Err(_r2)) => return Err(error::SQLMDError::from(r1)),
     }
-
-}
-
-
-#[tokio::main]
-async fn main() {
-    
-    // let dbpath = "geo_end.db";
-    let xyzpath = "geo_end.xyz";
-    let _ = read_xyz(xyzpath);
 
 }
