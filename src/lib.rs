@@ -42,22 +42,24 @@ pub async fn read_xyz(filepath: &str)
 
   // If 'filepath' is new or updated, read it and copy to database
   if is_xyz_updated {
-    println!("Read xyz");
+    println!("Load trajectory from {}", filepath);
     let stdout = io::stdout();
     let (tx0, rx0) = mpsc::channel(102400);
     let (tx1, rx1) = mpsc::channel(1024);
     
     let load_handle = tokio::spawn(load::load_xyz(tx0, tx1, xyzpath));
-    let save_handle = tokio::spawn(load::save_db(rx0, dbpath));
+    let save_handle = tokio::spawn(load::save_db(rx0, conn));
     let log_handle = tokio::spawn(load::print_log(rx1, stdout));
 
     let results = tokio::join!(load_handle, save_handle, log_handle);
     match results {
-      (Ok(_), Ok(_), Ok(_)) => println!("##### HANDLED #####"),
+      (Ok(_), Ok(_), Ok(_)) => println!("##### SUCCESSFULLY HANDLED #####"),
       (Err(e), _, _) => return Err(error::SQLMDError::from(e)),
       (_, Err(e), _) => return Err(error::SQLMDError::from(e)),
       (_, _, Err(e)) => return Err(error::SQLMDError::from(e)),
     }
+  }else{
+    println!("Load trajectory from {}", dbpath);
   }
 
   Ok(())
@@ -68,14 +70,13 @@ pub async fn read_xyz(filepath: &str)
 #[pyfunction]
 #[pyo3(name = "read_xyz")]
 fn py_read_xyz(filepath: &str) -> PyResult<String> {
-    
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(1).enable_all().build().unwrap();
 
-    match runtime.block_on(read_xyz(filepath)) {
-        Ok(_) => Ok("!!! -------- Finished -------- !!!".to_string()),
-        Err(e) => Err(pyo3::PyErr::from(e)),
-    }
+  let runtime = tokio::runtime::Builder::new_multi_thread()
+              .worker_threads(1).enable_all().build().unwrap();
+  match runtime.block_on(read_xyz(filepath)) {
+    Ok(_) => Ok("!!! -------- Finished -------- !!!".to_string()),
+    Err(e) => Err(pyo3::PyErr::from(e)),
+  }
 
 }
 

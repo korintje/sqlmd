@@ -74,32 +74,8 @@ pub async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: Str
 }
 
 
-pub async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: String) 
+pub async fn save_db(mut rx: mpsc::Receiver<Atom>, mut conn: sqlx::SqliteConnection) 
 -> Result<(), error::SQLMDError> {
-
-    // Prepare DB file and table
-    let _r1 = Sqlite::create_database(&dbpath).await;
-    let mut conn = SqliteConnection::connect(&dbpath).await?;
-    let table_count: TableCount = sqlx::query_as(
-            "SELECT COUNT(*) as count FROM sqlite_master WHERE TYPE='table' AND name=$1"
-        ).bind("traj").fetch_one(&mut conn).await?;
-
-    if table_count.count == 0 {
-        let _r2 = &conn.execute(sqlx::query(
-            "CREATE TABLE IF NOT EXISTS traj (
-                step        INTEGER NOT NULL,
-                atom_id     INTEGER NOT NULL,
-                element     TEXT NOT NULL,
-                charge      REAL,
-                x           REAL,
-                y           REAL,
-                z           REAL,
-                vx          REAL,
-                vy          REAL,
-                vz          REAL
-            )"
-        )).await;
-    }
 
     // Insert atom parameters into the table
     let mut values = vec![];
