@@ -48,8 +48,8 @@ pub async fn prepare_tables(mut conn: SqliteConnection)
     };
     if let Err(e) = conn.execute(sqlx::query(
       "CREATE TABLE IF NOT EXISTS metadata (
-        id             INTEGER,
-        xyzhash        INTEGER 
+        id             INTEGER UNIQUE,
+        xyzhash        BLOB
       )"
     )).await {
       return Err(SQLMDError::SQLError(e))
@@ -59,13 +59,13 @@ pub async fn prepare_tables(mut conn: SqliteConnection)
 }
 
 
-pub async fn get_hash(conn: &mut SqliteConnection) -> Result<Option<u32>, SQLMDError> {
-  let hash: Option<(u32,)> = sqlx::query_as(
+pub async fn get_hash(conn: &mut SqliteConnection) -> Result<Option<Vec<u8>>, SQLMDError> {
+  let hash: Option<(Vec<u8>,)> = sqlx::query_as(
     "SELECT xyzhash FROM metadata WHERE id = 1"
   ).fetch_optional(conn).await?;
   match hash {
     Some(num) => {
-      println!("GOT xyz checksum: {}", num.0);
+      // println!("Stored xyz checksum: {}", num.0);
       Ok(Some(num.0))
     },
     None => Ok(None),
@@ -73,9 +73,9 @@ pub async fn get_hash(conn: &mut SqliteConnection) -> Result<Option<u32>, SQLMDE
 }
 
 
-pub async fn save_hash(conn: &mut SqliteConnection, hash: u32) -> Result<(), SQLMDError> {
+pub async fn save_hash(conn: &mut SqliteConnection, hash: &[u8]) -> Result<(), SQLMDError> {
   conn.execute(
-    sqlx::query("REPLACE INTO metadata values (1, ?)").bind(hash)
+    sqlx::query("REPLACE INTO metadata (id, xyzhash) values (1, ?)").bind(hash)
   ).await?;
   Ok(())
 }

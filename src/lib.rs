@@ -5,6 +5,7 @@ mod db;
 use std::path;
 use pyo3::prelude::*;
 use tokio::{io, sync::mpsc};
+use sha2::{Sha256, Digest};
 
 
 // Read .db if exists. Read .xyz if .db not exists or .xyz updated
@@ -20,9 +21,13 @@ pub async fn read_xyz(filepath: &str)
   let conn = db::connect_db(&dbpath).await?;
   let mut conn = db::prepare_tables(conn).await?;
   
-  
+  // Calculate hash of File 'filepath' to detect file updating
   let is_xyz_updated: bool;
-  let xyz_hash = crc32fast::hash(xyzpath.as_bytes());
+  let mut file = std::fs::File::open(&xyzpath)?;
+  let mut sha256 = Sha256::new();
+  std::io::copy(&mut file, &mut sha256)?;
+  let hash_struct = sha256.finalize();
+  let xyz_hash = hash_struct.as_slice();
   match db::get_hash(&mut conn).await {
     Ok(hash) => match hash {
       Some(num) => is_xyz_updated = if num == xyz_hash {false} else {true},
@@ -35,8 +40,9 @@ pub async fn read_xyz(filepath: &str)
     Err(e) => return Err(e),
   };
 
+  // If 'filepath' is new or updated, read it and copy to database
   if is_xyz_updated {
-
+    println!("Read xyz");
     let stdout = io::stdout();
     let (tx0, rx0) = mpsc::channel(102400);
     let (tx1, rx1) = mpsc::channel(1024);
@@ -52,7 +58,6 @@ pub async fn read_xyz(filepath: &str)
       (_, Err(e), _) => return Err(error::SQLMDError::from(e)),
       (_, _, Err(e)) => return Err(error::SQLMDError::from(e)),
     }
-    // let _ok = load_handle.await?;  
   }
 
   Ok(())
