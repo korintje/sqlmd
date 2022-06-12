@@ -4,17 +4,14 @@ use sqlx::{migrate::MigrateDatabase, SqliteConnection, Connection, Sqlite, Execu
 use std::path;
 use crate::{model, error};
 use model::{Atom, TableCount};
-use pyo3::PyErr;
+// use pyo3::PyErr;
 
 
-async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String) 
--> Result<(), PyErr> {
+pub async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String) 
+-> Result<(), error::SQLMDError> {
     
-    let path = path::Path::new(&path);
-    let file = match fs::File::open(path).await {
-      Err(why) => panic!("couldn't open {}: {}", path.display(), why),
-      Ok(file) => file,
-    };
+    let filepath = path::Path::new(&path);
+    let file = fs::File::open(filepath).await?;
     let mut lines = BufReader::new(file).lines();
     
     loop {
@@ -33,10 +30,17 @@ async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String)
         // Load comment line to extract step number
         let line = lines.next_line().await?;
         let comment = match line {
-            None => panic!("Could not to find step number in .xyz file."),
             Some(s) => s,
+            None => return Err(error::SQLMDError::NotFoundError(
+                format!("Comment line not found in {}", path)
+            ))            
         };
-        let idx = &comment.find("iter:").unwrap() + 5;
+        let idx = match &comment.find("iter:") {
+            Some(num) => num + 5,
+            None => return Err(error::SQLMDError::NotFoundError(
+                format!("keyword 'iter:' not found in {}", path)
+            ))
+        };
         let s = &comment[idx..comment.len()];
         let step = s.split_whitespace().next().unwrap().parse::<i64>().unwrap();
         tx1.send(step).await.unwrap();
@@ -70,7 +74,7 @@ async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String)
 }
 
 
-async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: String) 
+pub async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: String) 
 -> Result<(), error::SQLMDError> {
 
     // Prepare DB file and table
@@ -130,44 +134,11 @@ async fn save_db(mut rx: mpsc::Receiver<Atom>, dbpath: String)
 
 
 // Print current treated MD step number
-async fn print_log(mut rx: mpsc::Receiver<i64>, mut stdout: io::Stdout) {
+pub async fn print_log(mut rx: mpsc::Receiver<i64>, mut stdout: io::Stdout) {
     
     while let Some(step) = rx.recv().await {
         let log = format!("Loading MD step: {}\r", &step);
         let _r = stdout.write(log.as_bytes()).await;
-    }
-
-}
-
-
-
-pub async fn read_xyz(filepath: &str) 
--> Result<(), error::SQLMDError> {
-    
-    let xyzpath = filepath.to_string();
-    let dbpath = xyzpath.clone() + ".db";
-
-    if path::Path::new(&dbpath).exists() {
-        let checksum = crc32fast::hash(b"geo_end.db");
-        println!("{}", checksum);
-    };
-   
-    let stdout = io::stdout();
-    let (tx0, rx0) = mpsc::channel(102400);
-    let (tx1, rx1) = mpsc::channel(1024);
-
-    let load_handle = tokio::spawn(load_xyz(tx0, tx1, xyzpath));
-    let save_handle = tokio::spawn(save_db(rx0, dbpath));
-    let _log_handle = tokio::spawn(print_log(rx1, stdout));
-
-    match tokio::join!(load_handle, save_handle) {
-        (Ok(_r1), Ok(_r2)) => {
-            println!("-------- Finished --------");
-            return Ok(())
-        },
-        (Ok(_r1), Err(r2)) => return Err(error::SQLMDError::from(r2)),
-        (Err(r1), Ok(_r2)) => return Err(error::SQLMDError::from(r1)),
-        (Err(r1), Err(_r2)) => return Err(error::SQLMDError::from(r1)),
     }
 
 }

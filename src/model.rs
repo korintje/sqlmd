@@ -19,3 +19,8 @@ pub struct Atom{
 pub struct TableCount {
     pub count: i32,
 }
+
+#[derive(FromRow, Serialize)]
+pub struct Metadata {
+    pub xyzhash: u32,
+}
