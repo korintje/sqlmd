@@ -113,6 +113,8 @@ pub async fn save_db(mut rx: mpsc::Receiver<Atom>, mut conn: sqlx::SqliteConnect
     let query = query_head + &values.join(", ");
     let _ = &conn.execute(sqlx::query(&query)).await?;
 
+    // Close db connection
+    let _ = &conn.close().await?;
     Ok(())
 
 }
