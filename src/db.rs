@@ -32,7 +32,7 @@ pub async fn prepare_tables(mut conn: SqliteConnection)
   .fetch_one(&mut conn)
   .await?;
   if table_count.count == 0 {
-    if let Err(e) = conn.execute(sqlx::query(
+    conn.execute(sqlx::query(
       "CREATE TABLE IF NOT EXISTS traj (
         step        INTEGER NOT NULL,
         atom_id     INTEGER NOT NULL,
@@ -45,29 +45,30 @@ pub async fn prepare_tables(mut conn: SqliteConnection)
         vy          REAL,
         vz          REAL
       )"
-    )).await {
-      return Err(SQLMDError::SQLError(e))
-    };
-    if let Err(e) = conn.execute(sqlx::query(
+    )).await?;
+    conn.execute(sqlx::query(
       "CREATE TABLE IF NOT EXISTS metadata (
-        id             INTEGER UNIQUE,
-        xyzhash        BLOB
+        key         TEXT UNIQUE NOT NULL,
+        value       TEXT,
+        unit        TEXT
       )"
-    )).await {
-      return Err(SQLMDError::SQLError(e))
-    };
+    )).await?;
+    conn.execute(sqlx::query(
+      "INSERT INTO metadata VALUES ('version', '1.0', 'none')"
+    )).await?;
   }
   Ok(conn)
 }
 
 
-pub async fn get_hash(conn: &mut SqliteConnection) -> Result<Option<Vec<u8>>, SQLMDError> {
-  let hash: Option<(Vec<u8>,)> = sqlx::query_as(
-    "SELECT xyzhash FROM metadata WHERE id = 1"
+// Get saved hash value from the metadata table
+pub async fn get_hash(conn: &mut SqliteConnection) -> Result<Option<String>, SQLMDError> {
+  let hash: Option<(String,)> = sqlx::query_as(
+    "SELECT value FROM metadata WHERE key = 'hash'"
   ).fetch_optional(conn).await?;
   match hash {
     Some(num) => {
-      // println!("Stored xyz checksum: {}", num.0);
+      println!("Stored xyz hash: {}", num.0);
       Ok(Some(num.0))
     },
     None => Ok(None),
@@ -75,14 +76,18 @@ pub async fn get_hash(conn: &mut SqliteConnection) -> Result<Option<Vec<u8>>, SQ
 }
 
 
-pub async fn save_hash(conn: &mut SqliteConnection, hash: &[u8]) -> Result<(), SQLMDError> {
+// Store calculated hash value to the metadata table
+pub async fn save_hash(conn: &mut SqliteConnection, hash: &str) -> Result<(), SQLMDError> {
   conn.execute(
-    sqlx::query("REPLACE INTO metadata (id, xyzhash) values (1, ?)").bind(hash)
+    sqlx::query(
+      "REPLACE INTO metadata (key, value, unit) values ('hash', ?, 'sha256')"
+    ).bind(hash)
   ).await?;
   Ok(())
 }
 
 
+// Save trajectory data
 pub async fn save_db(mut rx: mpsc::Receiver<Atom>, mut conn: sqlx::SqliteConnection) 
 -> Result<(), error::SQLMDError> {
 

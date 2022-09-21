@@ -2,6 +2,7 @@ mod model;
 mod load;
 mod error;
 mod db;
+use sqlx::Connection;
 use std::{path, env};
 use tokio::{io, sync::mpsc};
 use sha2::{Sha256, Digest};
@@ -24,14 +25,9 @@ async fn main() {
   println!("source xyz filepath: {}", &xyzpath);
 
   // Create SQLite database
-  let db_exist: bool;
-  if path::Path::new(&dbpath).exists() {
-    println!("database file {} found", &dbpath);
-    db_exist = true;
-  } else {
+  if !path::Path::new(&dbpath).exists() {
     println!("creating database file {}", &dbpath);
     db::create_db(&dbpath).await.unwrap();
-    db_exist = false;
   }
   let conn = db::connect_db(&dbpath).await.unwrap();
   let mut conn = db::prepare_tables(conn).await.unwrap();
@@ -39,28 +35,26 @@ async fn main() {
   
   // Calculate hash of 'filepath' to detect file update
   let is_xyz_updated: bool;
-  if db_exist == false {
-    is_xyz_updated = true;
-  } else {
-    println!("calculating hash of {} ...", &xyzpath);
-    let mut file = std::fs::File::open(&xyzpath).unwrap();
-    let mut sha256 = Sha256::new();
-    std::io::copy(&mut file, &mut sha256).unwrap();
-    let hash_struct = sha256.finalize();
-    let xyz_hash = hash_struct.as_slice();
-    match db::get_hash(&mut conn).await {
-      Ok(hash) => match hash {
-        Some(num) => is_xyz_updated = if num == xyz_hash {false} else {true},
-        None => is_xyz_updated = true,
-      },
-      Err(e) => panic!("{}: {}", e, &dbpath),
-    }
-    match db::save_hash(&mut conn, xyz_hash).await {
-      Ok(_) => (),
-      Err(e) => panic!("{}: {}", e, &dbpath),
-    };
-    println!("Finish hash calculation");
+  println!("calculating hash of {} ...", &xyzpath);
+  let mut file = std::fs::File::open(&xyzpath).unwrap();
+  let mut sha256 = Sha256::new();
+  std::io::copy(&mut file, &mut sha256).unwrap();
+  // let hash_struct = sha256.finalize();
+  // let xyz_hash = hash_struct.as_slice();
+  let xyz_hash: String = format!("{:X}", sha256.finalize());
+  match db::get_hash(&mut conn).await {
+    Ok(hash) => match hash {
+      Some(num) => is_xyz_updated = if num == xyz_hash {false} else {true},
+      None => is_xyz_updated = true,
+    },
+    Err(e) => panic!("{}: {}", e, &dbpath),
   }
+  match db::save_hash(&mut conn, &xyz_hash).await {
+    Ok(_) => (),
+    Err(e) => panic!("{}: {}", e, &dbpath),
+  };
+  println!("Finish hash calculation");
+
 
   // If 'filepath' is new or updated, read it and copy to database
   if is_xyz_updated {
@@ -77,6 +71,7 @@ async fn main() {
     }
   } else {
     println!("Load trajectory from {}", dbpath);
+    let _ = &conn.close().await.unwrap();
   }
 
 }
