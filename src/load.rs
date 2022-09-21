@@ -4,7 +4,6 @@ use std::path;
 use crate::{model, error};
 use model::Atom;
 
-
 pub async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: String) 
 -> Result<(), error::SQLMDError> {
     
@@ -55,10 +54,10 @@ pub async fn load_xyz(tx0: mpsc::Sender<Atom>, tx1: mpsc::Sender<i64>, path: Str
                 step: step,
                 atom_id: i,
                 element: params.next().unwrap_or("X").to_string(),
-                charge: params.next().unwrap().parse::<f64>().unwrap(),
                 x: params.next().unwrap().parse::<f64>().unwrap(),
                 y: params.next().unwrap().parse::<f64>().unwrap(),
                 z: params.next().unwrap().parse::<f64>().unwrap(),
+                charge: params.next().unwrap().parse::<f64>().unwrap(),
                 vx: params.next().unwrap().parse::<f64>().unwrap(),
                 vy: params.next().unwrap().parse::<f64>().unwrap(),
                 vz: params.next().unwrap().parse::<f64>().unwrap(),

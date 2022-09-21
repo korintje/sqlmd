@@ -3,12 +3,7 @@ name = "sqlmd"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-name = "sqlmd"
-crate-type = ["cdylib"]
-
 [dependencies]
-pyo3 = { version = "0.16.3", features = ["extension-module"] }
 sqlx = { version = "0.5.13", features = ["runtime-tokio-rustls", "sqlite"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0.97", features = ["derive"] }

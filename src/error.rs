@@ -1,12 +1,4 @@
 // use thiserror::Error;
-use pyo3::PyErr;
-use pyo3::exceptions::{
-  PyConnectionError,
-  PyIOError,
-  PyValueError,
-  PyException,
-};
-
 
 #[derive(thiserror::Error, Debug)]
 pub enum SQLMDError {
@@ -28,18 +20,3 @@ pub enum SQLMDError {
 
 }
 
-
-impl std::convert::From<SQLMDError> for PyErr {
-
-  fn from(err: SQLMDError) -> PyErr {
-
-    match err {
-      SQLMDError::IOError(e) => PyIOError::new_err(e),
-      SQLMDError::SQLError(e) => PyConnectionError::new_err(e.to_string()),
-      SQLMDError::ParseIntError(e) => PyValueError::new_err(e),
-      SQLMDError::JointError(e) => PyException::new_err(e.to_string()),
-      SQLMDError::NotFoundError(e) => PyValueError::new_err(e),
-    }
-  
-  }
-}

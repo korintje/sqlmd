@@ -2,8 +2,7 @@ mod model;
 mod load;
 mod error;
 mod db;
-use std::path;
-use pyo3::prelude::*;
+use std::{path, env};
 use tokio::{io, sync::mpsc};
 use sha2::{Sha256, Digest};
 
@@ -68,23 +67,25 @@ pub async fn read_xyz(filepath: &str)
 
 
 // Wrapper of read_xyz function for Python.
-#[pyfunction]
-#[pyo3(name = "read_xyz")]
-fn py_read_xyz(filepath: &str) -> PyResult<String> {
+fn main() {
+
+  let xyz_filepath: &str;
+  // let db_filepath: &str;
+  let args: Vec<String> = env::args().collect();
+  let len_args = args.len();
+  if len_args <= 1 {
+    xyz_filepath = "geo_end.xyz";
+    // db_filepath = "geo_end.db";
+  } else if len_args == 2 {
+    xyz_filepath = &args[1];
+    // db_filepath = "geo_end.db";
+  } else {
+    xyz_filepath = &args[1];
+    // db_filepath = &args[2];
+  }
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
               .worker_threads(1).enable_all().build().unwrap();
-  match runtime.block_on(read_xyz(filepath)) {
-    Ok(_) => Ok("!!! -------- Finished -------- !!!".to_string()),
-    Err(e) => Err(pyo3::PyErr::from(e)),
-  }
+  runtime.block_on(read_xyz(xyz_filepath)).unwrap();
 
-}
-
-
-// A Python module implemented in Rust.
-#[pymodule]
-fn sqlmd(_py: Python, m: &PyModule) -> PyResult<()> {
-    let _r = m.add_function(wrap_pyfunction!(py_read_xyz, m)?)?;
-    Ok(())
 }
